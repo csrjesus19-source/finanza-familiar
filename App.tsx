@@ -12,7 +12,8 @@ type TimeRange = 'all' | 'month' | 'week' | 'today';
 function App() {
   // --- STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('finanzaInteligente_auth') === 'true';
+    // Start false to force PIN entry on reload, unless purely for persistence checks
+    return false; 
   });
 
   const [familyProfile, setFamilyProfile] = useState<FamilyProfile | null>(() => {
@@ -26,7 +27,6 @@ function App() {
         try {
             const parsed = JSON.parse(saved);
             // AUTO-REPAIR: Ensure all loaded transactions have an ID
-            // This fixes the issue where old data cannot be deleted
             const repaired = parsed.map((t: any) => ({
                 ...t,
                 id: t.id || Date.now().toString() + Math.random().toString(36).substring(2)
@@ -41,7 +41,6 @@ function App() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  // NEW: State for custom delete confirmation modal
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   const [filterType, setFilterType] = useState<'all' | TransactionType>('all');
@@ -55,22 +54,11 @@ function App() {
     localStorage.setItem('finanzaInteligente_transactions', JSON.stringify(transactions));
   }, [transactions]);
 
-  useEffect(() => {
-    if (familyProfile) {
-        localStorage.setItem('finanzaInteligente_family', JSON.stringify(familyProfile));
-    }
-  }, [familyProfile]);
-
-  useEffect(() => {
-    localStorage.setItem('finanzaInteligente_auth', String(isAuthenticated));
-  }, [isAuthenticated]);
-
   // --- HANDLERS ---
   const addTransaction = (transaction: Transaction) => {
     setTransactions(prev => [transaction, ...prev]);
   };
 
-  // Replaces window.confirm with custom modal trigger
   const requestDeleteTransaction = (id: string) => {
     setTransactionToDelete(id);
   };
@@ -83,7 +71,14 @@ function App() {
   };
 
   const handleRegisterFamily = (profile: FamilyProfile) => {
-    setFamilyProfile(profile);
+    // CRITICAL FIX: Save immediately to localStorage to prevent data loss on fast reload
+    try {
+        localStorage.setItem('finanzaInteligente_family', JSON.stringify(profile));
+        setFamilyProfile(profile);
+    } catch (error) {
+        console.error("Error saving profile", error);
+        alert("Hubo un error guardando los datos en el dispositivo. Verifique que no esté en modo incógnito.");
+    }
   };
 
   const handleLogin = () => {
@@ -101,6 +96,8 @@ function App() {
               ...familyProfile,
               members: [...familyProfile.members, settingsNewMember.trim()]
           };
+          // Save immediately
+          localStorage.setItem('finanzaInteligente_family', JSON.stringify(updatedProfile));
           setFamilyProfile(updatedProfile);
           setSettingsNewMember('');
       }
@@ -113,6 +110,8 @@ function App() {
               ...familyProfile,
               members: familyProfile.members.filter(m => m !== memberToRemove)
           };
+          // Save immediately
+          localStorage.setItem('finanzaInteligente_family', JSON.stringify(updatedProfile));
           setFamilyProfile(updatedProfile);
       }
   };
@@ -120,7 +119,6 @@ function App() {
   // --- CALCULATIONS ---
   const timeFilteredTransactions = useMemo(() => {
     const now = new Date();
-    // Helper to get local date string YYYY-MM-DD
     const toLocalYMD = (d: Date) => {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     };
@@ -130,8 +128,6 @@ function App() {
     return transactions.filter(t => {
         if (timeRange === 'all') return true;
         
-        // Fix: Ensure we parse the date string correctly for comparison
-        // The date stored is ISO string, usually roughly local time if created via our form
         const tDate = new Date(t.date);
         const tDateStr = toLocalYMD(tDate);
 
@@ -142,7 +138,6 @@ function App() {
         if (timeRange === 'week') {
             const oneWeekAgo = new Date(now);
             oneWeekAgo.setDate(now.getDate() - 7);
-            // Reset hours for fairer comparison
             oneWeekAgo.setHours(0,0,0,0);
             return tDate >= oneWeekAgo;
         }
@@ -282,7 +277,7 @@ function App() {
                     title="Gestión Familiar"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l-.527-.738a1.125 1.125 0 0 1-.12-1.45l.774.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l-.527-.738a1.125 1.125 0 0 1 .12-1.45l.774.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </button>
@@ -291,10 +286,10 @@ function App() {
                 <button 
                   onClick={handleLogout}
                   className="text-slate-400 hover:text-rose-500 p-2 transition-colors rounded-lg hover:bg-rose-50"
-                  title="Cerrar Sesión"
+                  title="Bloquear / Salir"
                 >
                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                    </svg>
                 </button>
             </div>
