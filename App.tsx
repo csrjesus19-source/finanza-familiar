@@ -116,6 +116,62 @@ function App() {
       }
   };
 
+  // --- BACKUP & RESTORE HANDLERS ---
+  const handleExportData = () => {
+      if (!familyProfile) return;
+      
+      const dataToExport = {
+          family: familyProfile,
+          transactions: transactions,
+          exportDate: new Date().toISOString()
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      const dateStr = new Date().toISOString().split('T')[0];
+      downloadAnchorNode.setAttribute("download", `Respaldo_Finanza_${familyProfile.familyName}_${dateStr}.json`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
+
+  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          try {
+              const content = e.target?.result as string;
+              const parsedData = JSON.parse(content);
+
+              if (parsedData.family && Array.isArray(parsedData.transactions)) {
+                  if (confirm("ADVERTENCIA: Al importar, se sobrescribirán los datos actuales de este dispositivo con los de la copia de seguridad. ¿Desea continuar?")) {
+                      // Update LocalStorage
+                      localStorage.setItem('finanzaInteligente_family', JSON.stringify(parsedData.family));
+                      localStorage.setItem('finanzaInteligente_transactions', JSON.stringify(parsedData.transactions));
+                      
+                      // Update State
+                      setFamilyProfile(parsedData.family);
+                      setTransactions(parsedData.transactions);
+                      
+                      alert("¡Datos restaurados correctamente!");
+                      setIsSettingsOpen(false);
+                  }
+              } else {
+                  alert("El archivo seleccionado no es una copia de seguridad válida.");
+              }
+          } catch (error) {
+              console.error("Error importing data", error);
+              alert("Ocurrió un error al leer el archivo. Asegúrese de que sea un archivo .json válido.");
+          }
+      };
+      reader.readAsText(file);
+      // Reset input
+      event.target.value = '';
+  };
+
   // --- CALCULATIONS ---
   const timeFilteredTransactions = useMemo(() => {
     const now = new Date();
@@ -580,7 +636,7 @@ function App() {
               <div className="bg-white p-6 border-b border-slate-100 flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Gestión Familiar</h3>
-                    <p className="text-xs text-slate-500">Agrega o elimina miembros</p>
+                    <p className="text-xs text-slate-500">Agrega miembros o sincroniza datos</p>
                   </div>
                   <button 
                     onClick={() => setIsSettingsOpen(false)}
@@ -592,7 +648,42 @@ function App() {
                   </button>
               </div>
               
-              <div className="p-6">
+              <div className="p-6 max-h-[70vh] overflow-y-auto">
+                 {/* Backup & Restore Section */}
+                 <div className="mb-8 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                        Sincronización y Respaldo
+                    </h4>
+                    <p className="text-xs text-slate-500 mb-4">
+                        Descarga una copia para llevar tus datos a otro dispositivo.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button 
+                            onClick={handleExportData}
+                            className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all gap-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                            </svg>
+                            <span className="text-xs font-bold">Descargar Copia</span>
+                        </button>
+                        
+                        <label className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all gap-1 cursor-pointer">
+                            <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v12m-9-3 9 3 9-3" className="hidden" /> {/* Swap icon logic visually if desired */}
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+                            </svg>
+                            <span className="text-xs font-bold">Restaurar Copia</span>
+                        </label>
+                    </div>
+                 </div>
+
+                 {/* Members Section */}
                  <div className="mb-6">
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Agregar Nuevo Miembro</label>
                     <form onSubmit={handleAddMember} className="flex gap-2">
