@@ -3,11 +3,19 @@ import { Category, Transaction, TransactionType } from '../types';
 
 interface TransactionFormProps {
   onAddTransaction: (transaction: Transaction) => void;
+  onUpdateTransaction?: (transaction: Transaction) => void;
   onClose?: () => void;
   familyMembers: string[];
+  initialData?: Transaction | null;
 }
 
-export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransaction, onClose, familyMembers }) => {
+export const TransactionForm: React.FC<TransactionFormProps> = ({ 
+  onAddTransaction, 
+  onUpdateTransaction,
+  onClose, 
+  familyMembers,
+  initialData 
+}) => {
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string>(Category.ALIMENTOS);
@@ -16,12 +24,37 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMember, setSelectedMember] = useState<string>('');
 
-  // Auto-select first member if available
+  // Load initial data for editing
   useEffect(() => {
-    if (familyMembers.length > 0 && !selectedMember) {
+    if (initialData) {
+        setType(initialData.type);
+        setAmount(initialData.amount.toString());
+        setCategory(initialData.category);
+        setDescription(initialData.description);
+        setCompany(initialData.company || '');
+        
+        // Parse ISO date back to YYYY-MM-DD for input
+        const d = new Date(initialData.date);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setDate(`${yyyy}-${mm}-${dd}`);
+
+        setSelectedMember(initialData.createdBy);
+    } else {
+        // Reset defaults for new transaction
+        if (familyMembers.length > 0 && !selectedMember) {
+            setSelectedMember(familyMembers[0]);
+        }
+    }
+  }, [initialData, familyMembers]);
+
+  // Auto-select first member if available and not editing
+  useEffect(() => {
+    if (!initialData && familyMembers.length > 0 && !selectedMember) {
         setSelectedMember(familyMembers[0]);
     }
-  }, [familyMembers]);
+  }, [familyMembers, initialData]);
 
   const incomeCategories = [
     Category.SALARIO,
@@ -47,14 +80,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
     const [year, month, day] = date.split('-').map(Number);
     const now = new Date();
     // Create date using local components. Note: month is 0-indexed in JS Date
+    // If editing, preserve the original time if possible, otherwise use current time
     const transactionDate = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
 
-    // FIX: Use a more compatible ID generation method (timestamp + random) 
-    // to avoid issues with crypto.randomUUID() in non-secure contexts (http) or older browsers.
-    const safeId = Date.now().toString() + Math.random().toString(36).substring(2);
-
-    const newTransaction: Transaction = {
-      id: safeId,
+    const transactionData = {
       date: transactionDate.toISOString(),
       amount: parseFloat(amount),
       category,
@@ -64,7 +93,21 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
       company: company 
     };
 
-    onAddTransaction(newTransaction);
+    if (initialData && onUpdateTransaction) {
+        // Update existing
+        onUpdateTransaction({
+            ...transactionData,
+            id: initialData.id // Keep original ID
+        });
+    } else {
+        // Create new
+        // FIX: Use a more compatible ID generation method
+        const safeId = Date.now().toString() + Math.random().toString(36).substring(2);
+        onAddTransaction({
+            ...transactionData,
+            id: safeId
+        });
+    }
     
     // Reset fields
     setAmount('');
@@ -78,8 +121,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
     <div className="bg-white h-full flex flex-col">
       <div className="flex justify-between items-center p-6 border-b border-slate-100 flex-shrink-0">
         <div>
-            <h3 className="text-xl font-bold text-slate-800">Nueva Transacción</h3>
-            <p className="text-xs text-slate-400">Complete los detalles del movimiento</p>
+            <h3 className="text-xl font-bold text-slate-800">
+                {initialData ? 'Editar Transacción' : 'Nueva Transacción'}
+            </h3>
+            <p className="text-xs text-slate-400">
+                {initialData ? 'Modifique los detalles del registro' : 'Complete los detalles del movimiento'}
+            </p>
         </div>
         
         {onClose && (
@@ -140,7 +187,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
                 className="w-full pl-9 pr-4 py-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-2xl font-bold text-slate-800 placeholder-slate-300 bg-white"
                 placeholder="0"
                 required
-                autoFocus
+                autoFocus={!initialData}
                 />
             </div>
             </div>
@@ -257,12 +304,23 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onAddTransacti
                         : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
                     }`}
                 >
-                    {type === 'income' ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg>
+                    {initialData ? (
+                       <>
+                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                         Actualizar {type === 'income' ? 'Ingreso' : 'Gasto'}
+                       </>
                     ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg>
+                       <>
+                        {type === 'income' ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg>
+                        )}
+                        {type === 'income' ? 'Registrar Ingreso' : 'Registrar Gasto'}
+                       </>
                     )}
-                    {type === 'income' ? 'Registrar Ingreso' : 'Registrar Gasto'}
                 </button>
             </div>
         </div>
